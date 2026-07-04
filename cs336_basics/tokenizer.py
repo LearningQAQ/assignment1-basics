@@ -255,8 +255,7 @@ def update_cnt(word_cnt, pair_cnt, merge_pair):
 
 
 def train_bpe(input_path, vocab_size, special_tokens):
-    # num_processes = os.cpu_count() or 4
-    num_processes = 5
+    num_processes = os.cpu_count() or 4
 
     # 1. 使用 pretokenization_example.py 的方法切分文件
     boundaries = _get_safe_boundaries(input_path, num_processes, special_tokens)
