@@ -22,6 +22,11 @@ class Linear(nn.Module):
     
 
 class Embedding(nn.Module):
+    """
+    Args:
+        num_embeddings: 词表大小
+        embedding_dim: 嵌入向量维度
+    """
     def __init__(self, num_embeddings, embedding_dim, device=None, dtype=None):
         super().__init__()
         self.num_embeddings = num_embeddings

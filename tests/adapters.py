@@ -12,6 +12,8 @@ from cs336_basics.train_bpe import train_bpe
 from cs336_basics.tokenizer import Tokenizer
 from cs336_basics.layers import *
 from cs336_basics.attention import *
+from cs336_basics.model import * 
+
 
 def run_linear(
     d_in: int,
@@ -316,8 +318,38 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    transformer_block = TransformerBlock(d_model=d_model,
+                                         num_heads=num_heads,
+                                         d_ff=d_ff,
+                                         max_seq_len=max_seq_len,
+                                         rope_theta=theta,
+                                         use_rope=True,
+                                         device=in_features.device,
+                                         dtype=in_features.dtype)
+    state_dict = {
+        # Pre-Attention RMSNorm
+        "norm1.weight": weights["ln1.weight"],
 
+        # Causal Multi-Head Self-Attention Q/K/V/O Projections
+        "attn.q_proj.weight": weights["attn.q_proj.weight"],
+        "attn.k_proj.weight": weights["attn.k_proj.weight"],
+        "attn.v_proj.weight": weights["attn.v_proj.weight"],
+        "attn.o_proj.weight": weights["attn.output_proj.weight"],
+
+        # Pre-FFN RMSNorm
+        "norm2.weight": weights["ln2.weight"],
+
+        # SwiGLU FFN: w1, w3, w2
+        "ffn.linear1.weight": weights["ffn.w1.weight"],
+        "ffn.linear2.weight": weights["ffn.w2.weight"],
+        "ffn.linear3.weight": weights["ffn.w3.weight"],
+    }
+    transformer_block.load_state_dict(state_dict)
+    
+    # 生成 token_positions: Int[Tensor, "batch_size sequence_length"]
+    batch_size, seq_len, _ = in_features.shape
+    positions = torch.arange(seq_len).expand(batch_size, seq_len)
+    return transformer_block(in_features, positions)
 
 def run_transformer_lm(
     vocab_size: int,
@@ -398,8 +430,39 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
-
+    model_dtype = weights["token_embeddings.weight"].dtype
+    transformer_lm = Transformer(vocab_size=vocab_size,
+                               context_length=context_length,
+                               d_model=d_model,
+                               num_layers=num_layers,
+                               num_heads=num_heads,
+                               d_ff=d_ff,
+                               rope_theta=rope_theta,
+                               use_rope=True,
+                               weights=weights,
+                               device=in_indices.device,
+                               dtype=model_dtype)
+    mapping = {
+            "token_embeddings.weight": "embedding.weight",
+            "ln_final.weight":         "ln_final.weight",
+            "lm_head.weight":          "lm_head.weight",
+        }
+    for i in range(num_layers):
+        src, dst = f"layers.{i}", f"blocks.{i}"
+        mapping.update({
+            f"{src}.attn.q_proj.weight":      f"{dst}.attn.q_proj.weight",
+            f"{src}.attn.k_proj.weight":      f"{dst}.attn.k_proj.weight",
+            f"{src}.attn.v_proj.weight":      f"{dst}.attn.v_proj.weight",
+            f"{src}.attn.output_proj.weight": f"{dst}.attn.o_proj.weight",
+            f"{src}.ln1.weight":              f"{dst}.norm1.weight",
+            f"{src}.ln2.weight":              f"{dst}.norm2.weight",
+            f"{src}.ffn.w1.weight":           f"{dst}.ffn.linear1.weight",
+            f"{src}.ffn.w2.weight":           f"{dst}.ffn.linear2.weight",
+            f"{src}.ffn.w3.weight":           f"{dst}.ffn.linear3.weight",
+        })
+    state_dict = {mapping[k]: v for k, v in weights.items() if k in mapping}
+    transformer_lm.load_state_dict(state_dict)
+    return transformer_lm(in_indices)
 
 def run_rmsnorm(
     d_model: int,
