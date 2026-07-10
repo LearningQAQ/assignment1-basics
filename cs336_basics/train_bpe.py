@@ -3,6 +3,8 @@ import regex as re
 from collections import defaultdict
 from multiprocessing import Pool
 from .pretokenization_example import find_chunk_boundaries
+from tqdm import tqdm
+
 
 # GPT-2 预分词正则表达式
 PAT = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
@@ -280,7 +282,7 @@ def train_bpe(input_path, vocab_size, special_tokens):
     n_merges = vocab_size - base_vocab_size
 
     merges = []
-    for i in range(n_merges):
+    for i in tqdm(range(n_merges), desc="BPE Merges", unit="merge"):
         max_pair = get_max_pair(pair_cnt)
         vocab[base_vocab_size + i] = max_pair[0] + max_pair[1]
         merges.append(max_pair)
